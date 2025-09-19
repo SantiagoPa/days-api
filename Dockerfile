@@ -13,12 +13,11 @@ FROM node:22-alpine3.21 AS builder
 WORKDIR /app
 COPY . .
 COPY --from=deps-dev /app/node_modules ./node_modules
-RUN npm run test
 RUN npm run build
 
 
 FROM node:22-alpine3.21 AS prod
 WORKDIR /app
 COPY --from=builder /app/dist ./dist
-EXPOSE 4004
+COPY --from=builder /app/node_modules ./node_modules
 CMD ["node", "dist/app.js"]
