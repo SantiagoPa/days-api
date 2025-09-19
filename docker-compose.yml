@@ -1,0 +1,14 @@
+services:
+  days-api:
+    build:
+      context: .
+      target: ${STAGE}
+      dockerfile: Dockerfile
+    volumes: []
+    container_name: days-api
+    ports:
+      - ${PORT}:${PORT}
+    environment:
+      PORT: ${PORT}
+      STAGE: ${STAGE}
+      NODE_ENV: ${NODE_ENV}
