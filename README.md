@@ -28,3 +28,7 @@
 ![img-error-response](./imgs/error-response.png)
 3. entonces se debe mandar al menos un query param como por ejemplo: `localhost:3000/api/days/sum-days?days=1`
 ![img-success](./imgs/sueccess-response.png)
+
+## URL API Producción
+
+1. la URL de la API de produccion es `https://days-api-production.up.railway.app/api/days/sum-days`, desplegada en railway
