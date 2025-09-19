@@ -2,7 +2,7 @@
 
 ## modo desarrollo local
 
-1. clonar el .env.template y renombrarlo a .env
+1. clonar el `.env.template` y renombrarlo a `.env`
 2. ejecutar `npm install` en la consolja
 3. ejecutar `npm run dev`
 4. para generar el dist `npm run build` y luego ejecutar `npm run start` si se quiere mirar en preview
