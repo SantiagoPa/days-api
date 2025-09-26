@@ -227,40 +227,35 @@ export class DaysDatasourceImpl implements DaysDatasource {
     // * Verifica si una hora está dentro del horario laboral
     private isWorkingHour(hour: number): boolean {
         return (hour >= WORK_START_HOUR && hour < LUNCH_START_HOUR) ||
-            (hour >= LUNCH_END_HOUR && hour < WORK_END_HOUR);
+            (hour >= LUNCH_END_HOUR && hour <= WORK_END_HOUR);
     }
 
     // * Ajusta una fecha al siguiente momento laboral válido
     private adjustToNextWorkingTime(date: DateTime): DateTime {
         let adjustedDate = date;
 
-        // Si no es día hábil, avanzar al siguiente día hábil y ajustar a 8:00 AM
-        if (!this.isWorkingDay(adjustedDate)) {
-            while (!this.isWorkingDay(adjustedDate)) {
-                adjustedDate = adjustedDate.plus({ days: 1 });
-            }
-            // Cuando encontramos un día hábil después de un no hábil, ajustar a 8:00 AM
-            adjustedDate = adjustedDate.set({ hour: WORK_START_HOUR, minute: 0, second: 0, millisecond: 0 });
-            return adjustedDate;
+        // Si no es día hábil, retroceder al último día y/o hora laboral más cercano.
+        while (!this.isWorkingDay(adjustedDate)) {
+            adjustedDate = adjustedDate.minus({ days: 1 }).set({ hour: WORK_END_HOUR, minute: 0, second: 0, millisecond: 0  });
         }
 
-        // Si es día hábil, ajustar hora si está fuera del horario laboral
+        // Si es día hábil, ajustar hora hacia atrás si está fuera del horario laboral
         const hour = adjustedDate.hour;
 
         if (hour < WORK_START_HOUR) {
-            // Antes de las 8:00 AM
-            adjustedDate = adjustedDate.set({ hour: WORK_START_HOUR, minute: 0, second: 0, millisecond: 0 });
-        } else if (hour >= LUNCH_START_HOUR && hour < LUNCH_END_HOUR) {
-            // Durante el almuerzo (12:00-13:00)
-            adjustedDate = adjustedDate.set({ hour: LUNCH_END_HOUR, minute: 0, second: 0, millisecond: 0 });
-        } else if (hour >= WORK_END_HOUR) {
-            // Después de las 5:00 PM, ir al siguiente día hábil
-            adjustedDate = adjustedDate.plus({ days: 1 }).set({ hour: WORK_START_HOUR, minute: 0, second: 0, millisecond: 0 });
+            // Antes de las 8:00 AM - ir al día hábil anterior a las 5:00 PM
+            adjustedDate = adjustedDate.minus({ days: 1 }).set({ hour: WORK_END_HOUR, minute: 0, second: 0, millisecond: 0 });
 
-            // Verificar si el siguiente día es hábil
+            // Asegurar que el día anterior sea hábil
             while (!this.isWorkingDay(adjustedDate)) {
-                adjustedDate = adjustedDate.plus({ days: 1 });
+                adjustedDate = adjustedDate.minus({ days: 1 });
             }
+        } else if (hour >= LUNCH_START_HOUR && hour < LUNCH_END_HOUR) {
+            // Durante el almuerzo (12:00-13:00) - retroceder a 12:00 PM
+            adjustedDate = adjustedDate.set({ hour: LUNCH_START_HOUR, minute: 0, second: 0, millisecond: 0 });
+        } else if (hour > WORK_END_HOUR) {
+            // Después de las 5:00 PM - retroceder a las 5:00 PM del mismo día
+            adjustedDate = adjustedDate.set({ hour: WORK_END_HOUR, minute: 0, second: 0, millisecond: 0 });
         }
 
         return adjustedDate;
@@ -314,12 +309,14 @@ export class DaysDatasourceImpl implements DaysDatasource {
 
             if (currentHour < LUNCH_START_HOUR) {
                 // Estamos en la mañana
-                const hoursUntilLunch = LUNCH_START_HOUR - currentHour - (currentMinute / 60);
+                const fractionalCurrentHour = currentHour + (currentMinute / 60);
+                const hoursUntilLunch = LUNCH_START_HOUR - fractionalCurrentHour;
                 const hoursAfterLunch = WORK_END_HOUR - LUNCH_END_HOUR;
                 availableHours = hoursUntilLunch + hoursAfterLunch;
             } else {
                 // Estamos en la tarde (después del almuerzo)
-                availableHours = WORK_END_HOUR - currentHour - (currentMinute / 60);
+                const fractionalCurrentHour = currentHour + (currentMinute / 60);
+                availableHours = WORK_END_HOUR - fractionalCurrentHour;
             }
 
             if (remainingHours <= availableHours) {
@@ -328,15 +325,16 @@ export class DaysDatasourceImpl implements DaysDatasource {
                 let newMinute: number;
 
                 if (currentHour < LUNCH_START_HOUR) {
-                    const hoursUntilLunch = LUNCH_START_HOUR - currentHour - (currentMinute / 60);
+                    const fractionalCurrentHour = currentHour + (currentMinute / 60);
+                    const hoursUntilLunch = LUNCH_START_HOUR - fractionalCurrentHour;
 
                     if (remainingHours <= hoursUntilLunch) {
-                        // No cruza el almuerzo
+                        // No cruza el almuerzo - suma directa
                         const totalMinutes = currentMinute + (remainingHours * 60);
                         newHour = currentHour + Math.floor(totalMinutes / 60);
                         newMinute = Math.floor(totalMinutes % 60);
                     } else {
-                        // Cruza el almuerzo
+                        // Cruza el almuerzo - las horas restantes van después del almuerzo
                         const hoursAfterLunch = remainingHours - hoursUntilLunch;
                         const totalMinutesAfterLunch = hoursAfterLunch * 60;
                         newHour = LUNCH_END_HOUR + Math.floor(totalMinutesAfterLunch / 60);
@@ -386,7 +384,7 @@ export class DaysDatasourceImpl implements DaysDatasource {
             startDate = startDate.setZone(COLOMBIA_TIMEZONE);
         }
 
-        // Ajustar al siguiente momento laboral válido si es necesario
+        // Ajustar al momento laboral más cercano hacia atrás si es necesario
         let currentDate = this.adjustToNextWorkingTime(startDate);
 
         // Primero sumar días hábiles

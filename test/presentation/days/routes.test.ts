@@ -1,12 +1,15 @@
 import request from 'supertest'
 import { DateTime } from 'luxon';
 import { testServer } from '../../test-server';
+import { DaysDatasourceImpl } from '../../../src/infrastructure/datasource/days.datasource.impl';
 
 
 describe("Days routes testing", () => {
 
+    let datasource: DaysDatasourceImpl;
     beforeAll(async () => {
         await testServer.start();
+        datasource = new DaysDatasourceImpl();
     });
 
     afterAll(() => {
@@ -66,7 +69,7 @@ describe("Days routes testing", () => {
     });
 
     describe("Success cases", () => {
-        
+
         it("should handle Friday 5:00 PM + 1 hour → Monday 9:00 AM", async () => {
             // Viernes 17 de enero de 2025 a las 5:00 PM Colombia = 10:00 PM UTC
             const fridayDate = DateTime.fromISO('2025-01-17T22:00:00.000Z');
@@ -79,13 +82,13 @@ describe("Days routes testing", () => {
                 })
                 .expect(200);
 
-            // Validar estructura
             expect(body).toMatchObject({
                 date: expect.any(String)
             });
             expect(body.date).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
 
-            // Resultado esperado: Lunes 20 de enero 9:00 AM Colombia = 2:00 PM UTC
+            // Viernes 5:00 PM (no se ajusta, es hora válida) + 1 hora = Lunes 9:00 AM
+            // (Las horas se mueven al siguiente día hábil cuando exceden la jornada)
             expect(body.date).toBe('2025-01-20T14:00:00.000Z');
         });
 
@@ -106,7 +109,7 @@ describe("Days routes testing", () => {
             });
             expect(body.date).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
 
-            // Resultado esperado: Lunes 20 de enero 9:00 AM Colombia = 2:00 PM UTC
+            // Sábado → ajustar ATRÁS a Viernes 5:00 PM + 1 hora = Lunes 9:00 AM
             expect(body.date).toBe('2025-01-20T14:00:00.000Z');
         });
 
@@ -128,11 +131,11 @@ describe("Days routes testing", () => {
             });
             expect(body.date).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
 
-            // Resultado esperado: Jueves 16 de enero 10:00 AM Colombia = 3:00 PM UTC
+            // Martes 3:00 PM (hora válida) + 1 día = Miércoles 3:00 PM + 4 horas = Jueves 10:00 AM
             expect(body.date).toBe('2025-01-16T15:00:00.000Z');
         });
 
-        it("should handle Sunday 6:00 PM + 1 day → Tuesday 6:00 PM", async () => {
+        it("should handle Sunday 6:00 PM + 1 day → Monday 5:00 PM", async () => {
             // Domingo 19 de enero de 2025 a las 6:00 PM Colombia = 11:00 PM UTC
             const sundayDate = DateTime.fromISO('2025-01-19T23:00:00.000Z');
 
@@ -149,9 +152,8 @@ describe("Days routes testing", () => {
             });
             expect(body.date).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
 
-            // Resultado esperado: Martes 21 de enero 8:00 AM Colombia = 1:00 PM UTC
-            // (Se ajusta al horario laboral ya que domingo no es hábil)
-            expect(body.date).toBe('2025-01-21T13:00:00.000Z');
+            // Domingo → ajustar ATRÁS a Viernes 5:00 PM + 1 día = Lunes 5:00 PM
+            expect(body.date).toBe('2025-01-20T22:00:00.000Z');
         });
 
         it("should handle working day 8:00 AM + 8 hours → same day 5:00 PM", async () => {
@@ -171,7 +173,7 @@ describe("Days routes testing", () => {
             });
             expect(body.date).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
 
-            // Resultado esperado: Lunes 13 de enero 5:00 PM Colombia = 10:00 PM UTC
+            // Lunes 8:00 AM + 8 horas laborales = Lunes 5:00 PM
             expect(body.date).toBe('2025-01-13T22:00:00.000Z');
         });
 
@@ -192,11 +194,11 @@ describe("Days routes testing", () => {
             });
             expect(body.date).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
 
-            // Resultado esperado: Martes 14 de enero 8:00 AM Colombia = 1:00 PM UTC
+            // Lunes 8:00 AM + 1 día hábil = Martes 8:00 AM
             expect(body.date).toBe('2025-01-14T13:00:00.000Z');
         });
 
-        it("should handle working day 12:30 PM + 1 day → next working day 12:30 PM", async () => {
+        it("should handle working day 12:30 PM + 1 day → next working day 12:00 PM", async () => {
             // Lunes 13 de enero de 2025 a las 12:30 PM Colombia = 5:30 PM UTC
             const mondayDate = DateTime.fromISO('2025-01-13T17:30:00.000Z');
 
@@ -213,8 +215,8 @@ describe("Days routes testing", () => {
             });
             expect(body.date).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
 
-            // Resultado: Se ajusta a 1:00 PM (después del almuerzo) + 1 día = Martes 1:00 PM Colombia = 6:00 PM UTC
-            expect(body.date).toBe('2025-01-14T18:00:00.000Z');
+            // Lunes 12:30 PM → ajusta ATRÁS a 12:00 PM + 1 día = Martes 12:00 PM
+            expect(body.date).toBe('2025-01-14T17:00:00.000Z');
         });
 
         it("should handle working day 11:30 AM + 3 hours → same day 3:30 PM", async () => {
@@ -234,7 +236,7 @@ describe("Days routes testing", () => {
             });
             expect(body.date).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
 
-            // Resultado esperado: Lunes 13 de enero 3:30 PM Colombia = 8:30 PM UTC
+            // Lunes 11:30 AM + 3 horas = Lunes 3:30 PM (cruza almuerzo)
             expect(body.date).toBe('2025-01-13T20:30:00.000Z');
         });
 
@@ -256,8 +258,8 @@ describe("Days routes testing", () => {
             });
             expect(body.date).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
 
-            // Resultado esperado: 21 de abril 3:00 PM Colombia = 8:00 PM UTC
-            // (Saltando los festivos 17 y 18 de abril)
+            // 10 abril 10:00 AM + 5 días hábiles + 4 horas = 21 abril 3:00 PM
+            // (Saltando festivos 17 y 18 de abril)
             expect(body.date).toBe('2025-04-21T20:00:00.000Z');
         });
 

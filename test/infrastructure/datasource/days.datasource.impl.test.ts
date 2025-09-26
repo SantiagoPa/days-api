@@ -9,7 +9,7 @@ describe("Infrastructure Days datasource implementation testing", () => {
         datasource = new DaysDatasourceImpl();
     });
 
-    describe("Testing function isWorkingDay()", () => {
+  describe("Testing function isWorkingDay()", () => {
 
         it("should return true for weekdays that are not holidays", () => {
             // Lunes 13 de enero de 2025 (no es festivo)
@@ -62,10 +62,10 @@ describe("Infrastructure Days datasource implementation testing", () => {
         it("should return true for morning working hours", () => {
             // 8:00 AM - inicio de jornada
             expect((datasource as any).isWorkingHour(8)).toBe(true);
-
+            
             // 9:00 AM - hora de la mañana
             expect((datasource as any).isWorkingHour(9)).toBe(true);
-
+            
             // 11:00 AM - antes del almuerzo
             expect((datasource as any).isWorkingHour(11)).toBe(true);
         });
@@ -73,12 +73,15 @@ describe("Infrastructure Days datasource implementation testing", () => {
         it("should return true for afternoon working hours", () => {
             // 1:00 PM (13:00) - después del almuerzo
             expect((datasource as any).isWorkingHour(13)).toBe(true);
-
+            
             // 3:00 PM (15:00) - hora de la tarde
             expect((datasource as any).isWorkingHour(15)).toBe(true);
-
+            
             // 4:00 PM (16:00) - antes del fin de jornada
             expect((datasource as any).isWorkingHour(16)).toBe(true);
+
+            // 5:00 PM (17:00) - fin de jornada (INCLUIDA)
+            expect((datasource as any).isWorkingHour(17)).toBe(true);
         });
 
         it("should return false for lunch hour", () => {
@@ -89,17 +92,17 @@ describe("Infrastructure Days datasource implementation testing", () => {
         it("should return false for hours before work starts", () => {
             // 7:00 AM - antes del inicio
             expect((datasource as any).isWorkingHour(7)).toBe(false);
-
+            
             // 6:00 AM - muy temprano
             expect((datasource as any).isWorkingHour(6)).toBe(false);
         });
 
         it("should return false for hours after work ends", () => {
-            // 5:00 PM (17:00) - fin de jornada
-            expect((datasource as any).isWorkingHour(17)).toBe(false);
-
             // 6:00 PM (18:00) - después del trabajo
             expect((datasource as any).isWorkingHour(18)).toBe(false);
+            
+            // 7:00 PM (19:00) - muy tarde
+            expect((datasource as any).isWorkingHour(19)).toBe(false);
         });
 
     });
@@ -110,64 +113,67 @@ describe("Infrastructure Days datasource implementation testing", () => {
             // Martes 14 de enero de 2025 a las 10:30 AM
             const workingTime = DateTime.fromISO('2025-01-14T10:30:00', { zone: 'America/Bogota' });
             const result = (datasource as any).adjustToNextWorkingTime(workingTime);
-
+            
             expect(result.toISO()).toBe(workingTime.toISO());
         });
 
-        it("should adjust to 8:00 AM if time is before work hours", () => {
-            // Martes 14 de enero de 2025 a las 7:00 AM
+        it("should adjust to previous working day at 5:00 PM if before work hours", () => {
+            // Martes 14 de enero de 2025 a las 7:00 AM (antes del trabajo)
             const earlyTime = DateTime.fromISO('2025-01-14T07:00:00', { zone: 'America/Bogota' });
             const result = (datasource as any).adjustToNextWorkingTime(earlyTime);
-            const expected = DateTime.fromISO('2025-01-14T08:00:00', { zone: 'America/Bogota' });
-
+            // Debe ajustar ATRÁS al lunes a las 5:00 PM
+            const expected = DateTime.fromISO('2025-01-13T17:00:00', { zone: 'America/Bogota' });
+            
             expect(result.toISO()).toBe(expected.toISO());
         });
 
-        it("should adjust to 1:00 PM if time is during lunch", () => {
-            // Martes 14 de enero de 2025 a las 12:30 PM
+        it("should adjust to 12:00 PM if time is during lunch", () => {
+            // Martes 14 de enero de 2025 a las 12:30 PM (almuerzo)
             const lunchTime = DateTime.fromISO('2025-01-14T12:30:00', { zone: 'America/Bogota' });
             const result = (datasource as any).adjustToNextWorkingTime(lunchTime);
-            const expected = DateTime.fromISO('2025-01-14T13:00:00', { zone: 'America/Bogota' });
-
+            // Debe ajustar ATRÁS a 12:00 PM
+            const expected = DateTime.fromISO('2025-01-14T12:00:00', { zone: 'America/Bogota' });
+            
             expect(result.toISO()).toBe(expected.toISO());
         });
 
-        it("should adjust to next working day at 8:00 AM if after work hours", () => {
-            // Martes 14 de enero de 2025 a las 6:00 PM
+        it("should adjust to same day at 5:00 PM if after work hours", () => {
+            // Martes 14 de enero de 2025 a las 6:00 PM (después del trabajo)
             const afterWork = DateTime.fromISO('2025-01-14T18:00:00', { zone: 'America/Bogota' });
             const result = (datasource as any).adjustToNextWorkingTime(afterWork);
-            const expected = DateTime.fromISO('2025-01-15T08:00:00', { zone: 'America/Bogota' });
-
+            // Debe ajustar ATRÁS al mismo día a las 5:00 PM
+            const expected = DateTime.fromISO('2025-01-14T17:00:00', { zone: 'America/Bogota' });
+            
             expect(result.toISO()).toBe(expected.toISO());
         });
 
-        it("should skip weekends to find next working day", () => {
-            // Viernes 17 de enero de 2025 a las 6:00 PM
+        it("should skip weekends to find previous working day", () => {
+            // Viernes 17 de enero de 2025 a las 6:00 PM (después del trabajo)
             const fridayAfterWork = DateTime.fromISO('2025-01-17T18:00:00', { zone: 'America/Bogota' });
             const result = (datasource as any).adjustToNextWorkingTime(fridayAfterWork);
-            // Debe ir al lunes 20 de enero a las 8:00 AM
-            const expected = DateTime.fromISO('2025-01-20T08:00:00', { zone: 'America/Bogota' });
-
+            // Debe ajustar ATRÁS al viernes a las 5:00 PM
+            const expected = DateTime.fromISO('2025-01-17T17:00:00', { zone: 'America/Bogota' });
+            
             expect(result.toISO()).toBe(expected.toISO());
         });
 
-        it("should skip holidays to find next working day", () => {
+        it("should skip holidays to find previous working day", () => {
             // 31 de diciembre de 2024 a las 6:00 PM (día antes de festivo)
             const beforeHoliday = DateTime.fromISO('2024-12-31T18:00:00', { zone: 'America/Bogota' });
             const result = (datasource as any).adjustToNextWorkingTime(beforeHoliday);
-            // Debe saltar el 1 de enero (festivo) y ir al 2 de enero
-            const expected = DateTime.fromISO('2025-01-02T08:00:00', { zone: 'America/Bogota' });
-
+            // Debe ajustar ATRÁS al 31 de diciembre a las 5:00 PM
+            const expected = DateTime.fromISO('2024-12-31T17:00:00', { zone: 'America/Bogota' });
+            
             expect(result.toISO()).toBe(expected.toISO());
         });
 
-        it("should handle weekend dates", () => {
+        it("should handle weekend dates by going back to previous working day at 5:00 PM", () => {
             // Sábado 18 de enero de 2025 a las 10:00 AM
             const saturday = DateTime.fromISO('2025-01-18T10:00:00', { zone: 'America/Bogota' });
             const result = (datasource as any).adjustToNextWorkingTime(saturday);
-            // Debe ir al lunes 20 de enero a las 8:00 AM
-            const expected = DateTime.fromISO('2025-01-20T08:00:00', { zone: 'America/Bogota' });
-
+            // Días no hábiles van al día hábil anterior a las 5:00 PM
+            const expected = DateTime.fromISO('2025-01-17T17:00:00', { zone: 'America/Bogota' });
+            
             expect(result.toISO()).toBe(expected.toISO());
         });
 
@@ -180,7 +186,7 @@ describe("Infrastructure Days datasource implementation testing", () => {
             const monday = DateTime.fromISO('2025-01-13T10:00:00', { zone: 'America/Bogota' });
             const result = (datasource as any).addWorkingDays(monday, 1);
             const expected = DateTime.fromISO('2025-01-14T10:00:00', { zone: 'America/Bogota' });
-
+            
             expect(result.toISO()).toBe(expected.toISO());
         });
 
@@ -189,7 +195,7 @@ describe("Infrastructure Days datasource implementation testing", () => {
             const friday = DateTime.fromISO('2025-01-17T10:00:00', { zone: 'America/Bogota' });
             const result = (datasource as any).addWorkingDays(friday, 1);
             const expected = DateTime.fromISO('2025-01-20T10:00:00', { zone: 'America/Bogota' });
-
+            
             expect(result.toISO()).toBe(expected.toISO());
         });
 
@@ -198,7 +204,7 @@ describe("Infrastructure Days datasource implementation testing", () => {
             const beforeNewYear = DateTime.fromISO('2024-12-31T10:00:00', { zone: 'America/Bogota' });
             const result = (datasource as any).addWorkingDays(beforeNewYear, 1);
             const expected = DateTime.fromISO('2025-01-02T10:00:00', { zone: 'America/Bogota' });
-
+            
             expect(result.toISO()).toBe(expected.toISO());
         });
 
@@ -207,14 +213,14 @@ describe("Infrastructure Days datasource implementation testing", () => {
             const monday = DateTime.fromISO('2025-01-13T10:00:00', { zone: 'America/Bogota' });
             const result = (datasource as any).addWorkingDays(monday, 5);
             const expected = DateTime.fromISO('2025-01-20T10:00:00', { zone: 'America/Bogota' });
-
+            
             expect(result.toISO()).toBe(expected.toISO());
         });
 
         it("should return same date when adding 0 days", () => {
             const date = DateTime.fromISO('2025-01-13T10:00:00', { zone: 'America/Bogota' });
             const result = (datasource as any).addWorkingDays(date, 0);
-
+            
             expect(result.toISO()).toBe(date.toISO());
         });
 
@@ -227,7 +233,7 @@ describe("Infrastructure Days datasource implementation testing", () => {
             const morning = DateTime.fromISO('2025-01-14T09:00:00', { zone: 'America/Bogota' });
             const result = (datasource as any).addWorkingHours(morning, 2);
             const expected = DateTime.fromISO('2025-01-14T11:00:00', { zone: 'America/Bogota' });
-
+            
             expect(result.toISO()).toBe(expected.toISO());
         });
 
@@ -236,7 +242,7 @@ describe("Infrastructure Days datasource implementation testing", () => {
             const beforeLunch = DateTime.fromISO('2025-01-14T11:00:00', { zone: 'America/Bogota' });
             const result = (datasource as any).addWorkingHours(beforeLunch, 2);
             const expected = DateTime.fromISO('2025-01-14T14:00:00', { zone: 'America/Bogota' });
-
+            
             expect(result.toISO()).toBe(expected.toISO());
         });
 
@@ -245,7 +251,7 @@ describe("Infrastructure Days datasource implementation testing", () => {
             const afternoon = DateTime.fromISO('2025-01-14T16:00:00', { zone: 'America/Bogota' });
             const result = (datasource as any).addWorkingHours(afternoon, 2);
             const expected = DateTime.fromISO('2025-01-15T09:00:00', { zone: 'America/Bogota' });
-
+            
             expect(result.toISO()).toBe(expected.toISO());
         });
 
@@ -254,7 +260,7 @@ describe("Infrastructure Days datasource implementation testing", () => {
             const fridayAfternoon = DateTime.fromISO('2025-01-17T16:00:00', { zone: 'America/Bogota' });
             const result = (datasource as any).addWorkingHours(fridayAfternoon, 2);
             const expected = DateTime.fromISO('2025-01-20T09:00:00', { zone: 'America/Bogota' });
-
+            
             expect(result.toISO()).toBe(expected.toISO());
         });
 
@@ -263,25 +269,17 @@ describe("Infrastructure Days datasource implementation testing", () => {
             const morning = DateTime.fromISO('2025-01-14T09:00:00', { zone: 'America/Bogota' });
             const result = (datasource as any).addWorkingHours(morning, 16);
             const expected = DateTime.fromISO('2025-01-16T09:00:00', { zone: 'America/Bogota' });
-
+            
             expect(result.toISO()).toBe(expected.toISO());
         });
 
-        it("should adjust start time if not in working hours", () => {
-            // Sábado 18 de enero de 2025 a las 10:00 AM + 1 hora = Lunes 20 a las 9:00 AM
+        it("should adjust weekend start time and add hours correctly", () => {
+            // Sábado 18 de enero de 2025 a las 10:00 AM + 1 hora
             const weekend = DateTime.fromISO('2025-01-18T10:00:00', { zone: 'America/Bogota' });
             const result = (datasource as any).addWorkingHours(weekend, 1);
+            // Sábado → Viernes 5:00 PM + 1 hora → excede jornada → Lunes 9:00 AM
             const expected = DateTime.fromISO('2025-01-20T09:00:00', { zone: 'America/Bogota' });
-
-            expect(result.toISO()).toBe(expected.toISO());
-        });
-
-        it("should add 2 hours from 8:00 AM correctly", () => {
-            // Test específico para verificar 8:00 AM + 2 horas = 10:00 AM
-            const morning = DateTime.fromISO('2025-01-13T08:00:00', { zone: 'America/Bogota' });
-            const result = (datasource as any).addWorkingHours(morning, 2);
-            const expected = DateTime.fromISO('2025-01-13T10:00:00', { zone: 'America/Bogota' });
-
+            
             expect(result.toISO()).toBe(expected.toISO());
         });
 
@@ -290,9 +288,9 @@ describe("Infrastructure Days datasource implementation testing", () => {
             // Martes 14 de enero de 2025 a las 7:00 AM (antes del horario) + 2 horas
             const beforeWork = DateTime.fromISO('2025-01-14T07:00:00', { zone: 'America/Bogota' });
             const result = (datasource as any).addWorkingHours(beforeWork, 2);
-            // Debe ajustar a 8:00 AM y sumar 2 horas = 10:00 AM
+            // Debe ajustar a lunes 5:00 PM y sumar 2 horas = martes 10:00 AM
             const expected = DateTime.fromISO('2025-01-14T10:00:00', { zone: 'America/Bogota' });
-
+            
             expect(result.toISO()).toBe(expected.toISO());
         });
 
@@ -302,10 +300,69 @@ describe("Infrastructure Days datasource implementation testing", () => {
             const afternoon = DateTime.fromISO('2025-01-14T14:00:00', { zone: 'America/Bogota' });
             const result = (datasource as any).addWorkingHours(afternoon, 1);
             const expected = DateTime.fromISO('2025-01-14T15:00:00', { zone: 'America/Bogota' });
-
+            
             expect(result.toISO()).toBe(expected.toISO());
         });
 
+        it("should handle working day starting very early", () => {
+            // Martes 6:00 AM (muy temprano) + 1 hora
+            const veryEarly = DateTime.fromISO('2025-01-14T06:00:00', { zone: 'America/Bogota' });
+            const result = (datasource as any).addWorkingHours(veryEarly, 1);
+            // Debe ir al lunes 5:00 PM + 1 hora = martes 8:00 AM + 1 hora = martes 9:00 AM
+            const expected = DateTime.fromISO('2025-01-14T09:00:00', { zone: 'America/Bogota' });
+            
+            expect(result.toISO()).toBe(expected.toISO());
+        });
+
+        it("should handle working day starting very late", () => {
+            // Martes 10:00 PM (muy tarde) + 1 hora
+            const veryLate = DateTime.fromISO('2025-01-14T22:00:00', { zone: 'America/Bogota' });
+            const result = (datasource as any).addWorkingHours(veryLate, 1);
+            // Debe ajustar al martes 5:00 PM + 1 hora = miércoles 9:00 AM
+            const expected = DateTime.fromISO('2025-01-15T09:00:00', { zone: 'America/Bogota' });
+            
+            expect(result.toISO()).toBe(expected.toISO());
+        });
+
+        it("should handle multiple weekend days backward", () => {
+            // Domingo (2 días no hábiles atrás)
+            const sunday = DateTime.fromISO('2025-01-19T14:00:00', { zone: 'America/Bogota' });
+            const result = (datasource as any).adjustToNextWorkingTime(sunday);
+            // Debe ir al viernes 5:00 PM
+            const expected = DateTime.fromISO('2025-01-17T17:00:00', { zone: 'America/Bogota' });
+            
+            expect(result.toISO()).toBe(expected.toISO());
+        });
+
+        it("should handle holidays backward adjustment", () => {
+            // 2 de enero de 2025 (día después del festivo 1 de enero)
+            const afterHoliday = DateTime.fromISO('2025-01-02T10:00:00', { zone: 'America/Bogota' });
+            const result = (datasource as any).adjustToNextWorkingTime(afterHoliday);
+            // No se ajusta porque 2 de enero es día hábil y 10:00 AM es hora válida
+            const expected = DateTime.fromISO('2025-01-02T10:00:00', { zone: 'America/Bogota' });
+            
+            expect(result.toISO()).toBe(expected.toISO());
+        });
+
+        it("should handle exact work end time", () => {
+            // Martes 5:00 PM exacto (hora límite incluida)
+            const workEndTime = DateTime.fromISO('2025-01-14T17:00:00', { zone: 'America/Bogota' });
+            const result = (datasource as any).adjustToNextWorkingTime(workEndTime);
+            // No se debe ajustar porque 5:00 PM está incluida en el horario
+            const expected = DateTime.fromISO('2025-01-14T17:00:00', { zone: 'America/Bogota' });
+            
+            expect(result.toISO()).toBe(expected.toISO());
+        });
+
+        it("should handle exact lunch start time", () => {
+            // Martes 12:00 PM exacto (inicio de almuerzo)
+            const lunchStart = DateTime.fromISO('2025-01-14T12:00:00', { zone: 'America/Bogota' });
+            const result = (datasource as any).adjustToNextWorkingTime(lunchStart);
+            // Se mantiene en 12:00 PM porque el almuerzo ajusta hacia atrás a 12:00
+            const expected = DateTime.fromISO('2025-01-14T12:00:00', { zone: 'America/Bogota' });
+            
+            expect(result.toISO()).toBe(expected.toISO());
+        });
 
     });
 
@@ -317,12 +374,11 @@ describe("Infrastructure Days datasource implementation testing", () => {
                 startDate: startDate,
                 daysToAdd: 2
             });
-
+            
             // Lunes + 2 días hábiles = Miércoles
             const expected = DateTime.fromISO('2025-01-15T10:00:00', { zone: 'America/Bogota' });
             expect(result.toISO()).toBe(expected.toISO());
         });
-
 
         it("should calculate with only hours parameter", () => {
             const startDate = DateTime.fromISO('2025-01-13T10:00:00', { zone: 'America/Bogota' });
@@ -330,7 +386,7 @@ describe("Infrastructure Days datasource implementation testing", () => {
                 startDate: startDate,
                 hoursToAdd: 3
             });
-
+            
             // 10:00 AM + 3 horas de trabajo:
             // 10:00-12:00 (2h) + salto almuerzo + 13:00-14:00 (1h) = 3h total → 14:00
             const expected = DateTime.fromISO('2025-01-13T14:00:00', { zone: 'America/Bogota' });
@@ -344,7 +400,7 @@ describe("Infrastructure Days datasource implementation testing", () => {
                 daysToAdd: 1,
                 hoursToAdd: 4
             });
-
+            
             // Lunes 3:00 PM + 1 día = Martes 3:00 PM, + 4 horas = Miércoles 10:00 AM
             const expected = DateTime.fromISO('2025-01-15T10:00:00', { zone: 'America/Bogota' });
             expect(result.toISO()).toBe(expected.toISO());
@@ -353,14 +409,14 @@ describe("Infrastructure Days datasource implementation testing", () => {
         it("should use current time when no startDate provided", () => {
             const mockNow = DateTime.fromISO('2025-01-13T10:00:00', { zone: 'America/Bogota' }) as DateTime<true>;
             jest.spyOn(DateTime, 'now').mockReturnValue(mockNow);
-
+            
             const result = datasource.calculate({
                 daysToAdd: 1
             });
-
+            
             const expected = DateTime.fromISO('2025-01-14T10:00:00', { zone: 'America/Bogota' });
             expect(result.toISO()).toBe(expected.toISO());
-
+            
             jest.restoreAllMocks();
         });
 
@@ -371,45 +427,53 @@ describe("Infrastructure Days datasource implementation testing", () => {
                 startDate: utcDate,
                 hoursToAdd: 2
             });
-
+            
             const expected = DateTime.fromISO('2025-01-13T12:00:00', { zone: 'America/Bogota' });
             expect(result.toISO()).toBe(expected.toISO());
         });
 
-        it("should adjust invalid start times to working hours", () => {
+        it("should handle complex weekend adjustment with hours", () => {
             // Sábado (no laboral)
             const weekend = DateTime.fromISO('2025-01-18T10:00:00', { zone: 'America/Bogota' });
             const result = datasource.calculate({
                 startDate: weekend,
                 hoursToAdd: 1
             });
-
-            // Debe ajustar al lunes a las 8:00 AM y sumar 1 hora
+            
+            // Sábado → Viernes 5:00 PM + 1 hora → excede jornada → Lunes 9:00 AM
             const expected = DateTime.fromISO('2025-01-20T09:00:00', { zone: 'America/Bogota' });
+            expect(result.toISO()).toBe(expected.toISO());
+        });
+
+        it("should add 2 hours from 8:00 AM correctly", () => {
+            // Test específico para verificar 8:00 AM + 2 horas = 10:00 AM
+            const morning = DateTime.fromISO('2025-01-13T08:00:00', { zone: 'America/Bogota' });
+            const result = (datasource as any).addWorkingHours(morning, 2);
+            const expected = DateTime.fromISO('2025-01-13T10:00:00', { zone: 'America/Bogota' });
+            
             expect(result.toISO()).toBe(expected.toISO());
         });
 
         it("should debug complex scenario step by step", () => {
             // Debug del escenario complejo paso a paso
             const yearEnd = DateTime.fromISO('2024-12-31T16:00:00', { zone: 'America/Bogota' });
-
+            
             // Paso 1: Ajustar al siguiente momento laboral (no debería cambiar porque 4:00 PM está en horario)
             const step1 = (datasource as any).adjustToNextWorkingTime(yearEnd);
             // console.log('Step 1 (adjust):', step1.toISO());
-
+            
             // Paso 2: Sumar 1 día hábil (saltando 1 ene festivo)
             const step2 = (datasource as any).addWorkingDays(step1, 1);
             // console.log('Step 2 (+ 1 day):', step2.toISO());
-
+            
             // Paso 3: Sumar 2 horas (4:00 PM + 2h = 6:00 PM, excede jornada → siguiente día 9:00 AM)
             const step3 = (datasource as any).addWorkingHours(step2, 2);
             // console.log('Step 3 (+ 2 hours):', step3.toISO());
-
+            
             // Resultado esperado corregido
             const expected = DateTime.fromISO('2025-01-03T09:00:00', { zone: 'America/Bogota' });
             expect(step3.toISO()).toBe(expected.toISO());
         });
-
 
         it("should handle complex scenario with holidays and weekends", () => {
             // 31 de diciembre de 2024 a las 4:00 PM + 1 día + 2 horas
@@ -419,7 +483,7 @@ describe("Infrastructure Days datasource implementation testing", () => {
                 daysToAdd: 1,
                 hoursToAdd: 2
             });
-
+            
             // Lógica correcta:
             // 31 dic 4:00 PM (dentro del horario) → no se ajusta
             // + 1 día hábil → 2 ene 4:00 PM (saltando 1 ene festivo)
@@ -435,7 +499,7 @@ describe("Infrastructure Days datasource implementation testing", () => {
                 daysToAdd: 0,
                 hoursToAdd: 0
             });
-
+            
             expect(result.toISO()).toBe(startDate.toISO());
         });
 
